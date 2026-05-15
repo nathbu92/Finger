@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#060612">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Finger Picker">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23060612'/><text y='70' x='50' text-anchor='middle' font-size='60'>👆</text></svg>">
+<title>Finger Picker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --bg: #060612;
+    --neon-cyan: #00f5ff;
+    --neon-yellow: #ffe600;
+    --text: #e0e0ff;
+    --grid: rgba(0, 245, 255, 0.04);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    font-family: 'Orbitron', monospace;
+    color: var(--text);
+    touch-action: none;
+    user-select: none;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(6,6,18,0.85) 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #canvas {
+    position: fixed; inset: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  #ui {
+    position: fixed; inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  #title {
+    font-size: clamp(1.2rem, 4vw, 2rem);
+    font-weight: 900;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 20px var(--neon-cyan), 0 0 60px rgba(0,245,255,0.3);
+    margin-bottom: 8px;
+    animation: flicker 4s infinite;
+  }
+
+  #subtitle {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: clamp(0.65rem, 2vw, 0.85rem);
+    color: rgba(0, 245, 255, 0.5);
+    letter-spacing: 0.2em;
+    margin-bottom: 40px;
+  }
+
+  #status {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: clamp(0.8rem, 2.5vw, 1rem);
+    color: rgba(224, 224, 255, 0.7);
+    letter-spacing: 0.15em;
+    text-align: center;
+    padding: 0 20px;
+    min-height: 1.5em;
+    transition: all 0.3s;
+  }
+
+  /* Winner overlay */
+  #winner-overlay {
+    position: fixed; inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(6,6,18,0.88);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s;
+  }
+
+  #winner-overlay.show {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  #winner-color-badge {
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    margin-bottom: 20px;
+    border: 3px solid currentColor;
+    box-shadow: 0 0 30px currentColor, inset 0 0 20px rgba(255,255,255,0.1);
+    animation: badge-pulse 1s ease-in-out infinite alternate;
+  }
+
+  @keyframes badge-pulse {
+    from { transform: scale(1); }
+    to { transform: scale(1.1); }
+  }
+
+  #winner-name {
+    font-size: clamp(3rem, 15vw, 9rem);
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    line-height: 1;
+    margin-bottom: 40px;
+    animation: winner-pulse 0.8s ease-in-out infinite alternate;
+  }
+
+  #restart-btn {
+    pointer-events: all;
+    background: transparent;
+    border: 1px solid var(--neon-cyan);
+    color: var(--neon-cyan);
+    font-family: 'Orbitron', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.3em;
+    padding: 14px 36px;
+    cursor: pointer;
+    text-transform: uppercase;
+    box-shadow: 0 0 20px rgba(0,245,255,0.2), inset 0 0 20px rgba(0,245,255,0.05);
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #restart-btn::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0,245,255,0.15), transparent);
+    transition: left 0.4s;
+  }
+
+  #restart-btn:hover::before { left: 100%; }
+  #restart-btn:hover, #restart-btn:active {
+    background: rgba(0,245,255,0.1);
+    box-shadow: 0 0 40px rgba(0,245,255,0.4), inset 0 0 20px rgba(0,245,255,0.1);
+  }
+
+  /* Countdown */
+  #countdown {
+    position: fixed; inset: 0;
+    z-index: 8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  #countdown-num {
+    font-size: clamp(8rem, 30vw, 20rem);
+    font-weight: 900;
+    line-height: 1;
+    color: var(--neon-yellow);
+    text-shadow: 0 0 40px var(--neon-yellow), 0 0 100px rgba(255,230,0,0.4);
+  }
+
+  /* Touch dots */
+  .touch-dot {
+    position: fixed;
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    pointer-events: none;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .touch-dot.active { transform: translate(-50%, -50%) scale(1); }
+  .touch-dot.chosen { animation: chosen-bounce 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+  .touch-dot.rejected { animation: rejected-shrink 0.3s ease-in forwards; }
+
+  .touch-dot-inner {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    position: relative;
+    transition: transform 0.1s;
+  }
+
+  .touch-dot-ring {
+    position: absolute; inset: -8px;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    opacity: 0.5;
+    animation: ring-pulse 1.5s ease-in-out infinite;
+  }
+
+  .touch-dot-ring2 {
+    position: absolute; inset: -16px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    opacity: 0.2;
+    animation: ring-pulse 1.5s ease-in-out infinite 0.3s;
+  }
+
+  /* Install banner */
+  #install-banner {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 20;
+    background: rgba(6,6,18,0.97);
+    border-top: 1px solid rgba(0,245,255,0.3);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transform: translateY(100%);
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 -10px 40px rgba(0,245,255,0.1);
+  }
+
+  #install-banner.visible { transform: translateY(0); }
+
+  #install-banner .icon {
+    font-size: 2rem;
+    flex-shrink: 0;
+  }
+
+  #install-banner .text {
+    flex: 1;
+  }
+
+  #install-banner .text strong {
+    display: block;
+    font-size: 0.75rem;
+    letter-spacing: 0.2em;
+    color: var(--neon-cyan);
+    margin-bottom: 3px;
+  }
+
+  #install-banner .text span {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    color: rgba(224,224,255,0.5);
+    letter-spacing: 0.1em;
+  }
+
+  #install-btn {
+    background: var(--neon-cyan);
+    color: var(--bg);
+    border: none;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    padding: 10px 16px;
+    cursor: pointer;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+
+  #install-btn:hover { filter: brightness(1.2); }
+
+  #install-dismiss {
+    background: none;
+    border: none;
+    color: rgba(224,224,255,0.3);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 4px;
+    flex-shrink: 0;
+  }
+
+  @keyframes ring-pulse {
+    0%, 100% { transform: scale(1); opacity: 0.4; }
+    50% { transform: scale(1.1); opacity: 0.1; }
+  }
+
+  @keyframes flicker {
+    0%, 95%, 100% { opacity: 1; }
+    96% { opacity: 0.7; }
+    97% { opacity: 1; }
+    98% { opacity: 0.5; }
+    99% { opacity: 1; }
+  }
+
+  @keyframes winner-pulse {
+    from { transform: scale(1); filter: brightness(1); }
+    to { transform: scale(1.04); filter: brightness(1.3); }
+  }
+
+  @keyframes chosen-bounce {
+    0% { transform: translate(-50%, -50%) scale(1); }
+    40% { transform: translate(-50%, -50%) scale(1.7); }
+    70% { transform: translate(-50%, -50%) scale(1.1); }
+    100% { transform: translate(-50%, -50%) scale(1.4); }
+  }
+
+  @keyframes rejected-shrink {
+    0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  }
+
+  #scan-line {
+    position: fixed;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
+    z-index: 9;
+    opacity: 0;
+    pointer-events: none;
+    box-shadow: 0 0 10px var(--neon-cyan);
+  }
+
+  /* Persistent mini replay button */
+  #mini-replay {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 6;
+    pointer-events: all;
+    background: transparent;
+    border: 1px solid rgba(0, 245, 255, 0.35);
+    color: rgba(0, 245, 255, 0.55);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.25em;
+    padding: 7px 18px;
+    cursor: pointer;
+    text-transform: uppercase;
+    border-radius: 2px;
+    transition: all 0.2s;
+    box-shadow: 0 0 10px rgba(0,245,255,0.08);
+    -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+  }
+
+  #mini-replay:hover, #mini-replay:active {
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+    box-shadow: 0 0 20px rgba(0,245,255,0.25);
+    background: rgba(0,245,255,0.06);
+  }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="ui">
+  <div id="title">Finger Picker</div>
+  <div id="subtitle">// WHO GOES FIRST //</div>
+  <div id="status">Posez vos doigts sur l'écran</div>
+</div>
+
+<div id="countdown">
+  <div id="countdown-num">3</div>
+</div>
+
+<div id="winner-overlay">
+  <div id="winner-color-badge"></div>
+  <div id="winner-name">?</div>
+  <button id="restart-btn" id="restart-btn">[ REJOUER ]</button>
+</div>
+
+<div id="scan-line"></div>
+
+<button id="mini-replay">↺ rejouer</button>
+
+<div id="install-banner">
+  <div class="icon">📲</div>
+  <div class="text">
+    <strong>INSTALLER L'APP</strong>
+    <span>Accès rapide depuis l'écran d'accueil</span>
+  </div>
+  <button id="install-btn">INSTALLER</button>
+  <button id="install-dismiss">✕</button>
+</div>
+
+<script>
+// ─── PWA INSTALL ───────────────────────────────────────────────────────────
+let deferredInstallPrompt = null;
+const installBanner = document.getElementById('install-banner');
+const installBtn = document.getElementById('install-btn');
+const installDismiss = document.getElementById('install-dismiss');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  // Show banner after 2s
+  setTimeout(() => {
+    if (!localStorage.getItem('pwa-dismissed')) {
+      installBanner.classList.add('visible');
+    }
+  }, 2000);
+});
+
+installBtn.addEventListener('click', async () => {
+  if (!deferredInstallPrompt) return;
+  installBanner.classList.remove('visible');
+  deferredInstallPrompt.prompt();
+  const { outcome } = await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+});
+
+installDismiss.addEventListener('click', () => {
+  installBanner.classList.remove('visible');
+  localStorage.setItem('pwa-dismissed', '1');
+});
+
+window.addEventListener('appinstalled', () => {
+  installBanner.classList.remove('visible');
+  deferredInstallPrompt = null;
+});
+
+// Register service worker for PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    // Inline SW via blob
+    const swCode = `
+      const CACHE = 'finger-picker-v1';
+      self.addEventListener('install', e => {
+        self.skipWaiting();
+      });
+      self.addEventListener('activate', e => {
+        e.waitUntil(clients.claim());
+      });
+      self.addEventListener('fetch', e => {
+        e.respondWith(fetch(e.request).catch(() => new Response('Offline')));
+      });
+    `;
+    const blob = new Blob([swCode], { type: 'application/javascript' });
+    const swUrl = URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl).catch(() => {});
+  });
+}
+
+// Inject manifest dynamically
+const manifest = {
+  name: 'Finger Picker',
+  short_name: 'Finger Picker',
+  description: 'Désigne aléatoirement un joueur parmi les doigts posés',
+  start_url: '.',
+  display: 'fullscreen',
+  orientation: 'any',
+  background_color: '#060612',
+  theme_color: '#060612',
+  icons: [{
+    src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%23060612'/><text y='360' x='256' text-anchor='middle' font-size='320'>👆</text></svg>",
+    sizes: '512x512',
+    type: 'image/svg+xml',
+    purpose: 'any maskable'
+  }]
+};
+const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+const manifestUrl = URL.createObjectURL(manifestBlob);
+const linkEl = document.createElement('link');
+linkEl.rel = 'manifest';
+linkEl.href = manifestUrl;
+document.head.appendChild(linkEl);
+
+// ─── COLORS ───────────────────────────────────────────────────────────────
+const COLORS = [
+  { bg: '#ff006e', text: '#ff006e', name: 'PINK',   glow: 'rgba(255,0,110,0.6)' },
+  { bg: '#00f5ff', text: '#00f5ff', name: 'CYAN',   glow: 'rgba(0,245,255,0.6)' },
+  { bg: '#ffe600', text: '#ffe600', name: 'YELLOW', glow: 'rgba(255,230,0,0.6)' },
+  { bg: '#00ff88', text: '#00ff88', name: 'GREEN',  glow: 'rgba(0,255,136,0.6)' },
+  { bg: '#bf00ff', text: '#bf00ff', name: 'PURPLE', glow: 'rgba(191,0,255,0.6)' },
+  { bg: '#ff6b00', text: '#ff6b00', name: 'ORANGE', glow: 'rgba(255,107,0,0.6)' },
+  { bg: '#00bfff', text: '#00bfff', name: 'BLUE',   glow: 'rgba(0,191,255,0.6)' },
+  { bg: '#ff4444', text: '#ff4444', name: 'RED',    glow: 'rgba(255,68,68,0.6)' },
+  { bg: '#ffffff', text: '#ffffff', name: 'WHITE',  glow: 'rgba(255,255,255,0.6)' },
+  { bg: '#44ff00', text: '#44ff00', name: 'LIME',   glow: 'rgba(68,255,0,0.6)' },
+];
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// State
+let activeTouches = {};
+let gameState = 'waiting';
+let holdTimer = null;
+let countdownInterval = null;
+let particles = [];
+let shockwaves = [];
+let colorIndex = 0;
+
+// ─── PARTICLE SYSTEM ──────────────────────────────────────────────────────
+class Particle {
+  constructor(x, y, color) {
+    this.x = x; this.y = y;
+    this.color = color;
+    this.vx = (Math.random() - 0.5) * 6;
+    this.vy = (Math.random() - 0.5) * 6 - 2;
+    this.life = 1;
+    this.size = Math.random() * 4 + 1;
+    this.decay = Math.random() * 0.02 + 0.01;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vy += 0.1;
+    this.life -= this.decay;
+  }
+  draw(ctx) {
+    ctx.save();
+    ctx.globalAlpha = this.life;
+    ctx.fillStyle = this.color;
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur = 8;
+    ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+    ctx.restore();
+  }
+}
+
+function spawnParticles(x, y, color, n = 20) {
+  for (let i = 0; i < n; i++) particles.push(new Particle(x, y, color));
+}
+
+function drawConnections() {
+  const pts = Object.values(activeTouches);
+  if (pts.length < 2) return;
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i+1; j < pts.length; j++) {
+      const a = pts[i], b = pts[j];
+      const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+      grad.addColorStop(0, a.color.bg + '66');
+      grad.addColorStop(1, b.color.bg + '66');
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 8]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+}
+
+function addShockwave(x, y, color) {
+  shockwaves.push({ x, y, color, r: 0, max: 200, life: 1 });
+}
+
+function loop() {
+  ctx.clearRect(0, 0, W, H);
+
+  shockwaves = shockwaves.filter(s => s.life > 0);
+  for (const s of shockwaves) {
+    s.r += 8;
+    s.life -= 0.03;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+    ctx.strokeStyle = s.color;
+    ctx.globalAlpha = s.life * 0.5;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  if (gameState === 'holding' || gameState === 'countdown') drawConnections();
+
+  particles = particles.filter(p => p.life > 0);
+  for (const p of particles) { p.update(); p.draw(ctx); }
+
+  requestAnimationFrame(loop);
+}
+loop();
+
+// ─── DOT MANAGEMENT ───────────────────────────────────────────────────────
+function createDot(id, x, y, color) {
+  const el = document.createElement('div');
+  el.className = 'touch-dot';
+  el.id = 'dot-' + id;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+
+  const inner = document.createElement('div');
+  inner.className = 'touch-dot-inner';
+  inner.style.background = color.bg + '22';
+  inner.style.border = `2px solid ${color.bg}`;
+  inner.style.color = color.text;
+  inner.style.boxShadow = `0 0 20px ${color.glow}, inset 0 0 15px ${color.bg}22`;
+
+  const ring = document.createElement('div');
+  ring.className = 'touch-dot-ring';
+  ring.style.borderColor = color.bg;
+  ring.style.boxShadow = `0 0 10px ${color.bg}`;
+
+  const ring2 = document.createElement('div');
+  ring2.className = 'touch-dot-ring2';
+  ring2.style.borderColor = color.bg;
+
+  inner.appendChild(ring);
+  inner.appendChild(ring2);
+  el.appendChild(inner);
+  document.body.appendChild(el);
+
+  requestAnimationFrame(() => el.classList.add('active'));
+  return el;
+}
+
+function removeDot(id) {
+  const el = document.getElementById('dot-' + id);
+  if (el) {
+    el.classList.remove('active');
+    setTimeout(() => { if (el.parentNode) el.remove(); }, 300);
+  }
+}
+
+function hardRemoveDot(id) {
+  const el = document.getElementById('dot-' + id);
+  if (el) el.remove();
+}
+
+function updateStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+
+// ─── GAME LOGIC ───────────────────────────────────────────────────────────
+function getColorForIndex(i) {
+  return COLORS[i % COLORS.length];
+}
+
+function onTouchStart(e) {
+  e.preventDefault();
+  if (gameState === 'done') return;
+
+  for (const t of e.changedTouches) {
+    if (Object.keys(activeTouches).length >= 10) break;
+    if (activeTouches[t.identifier]) continue;
+    const color = getColorForIndex(colorIndex++);
+    const el = createDot(t.identifier, t.clientX, t.clientY, color);
+    activeTouches[t.identifier] = { x: t.clientX, y: t.clientY, color, el };
+    spawnParticles(t.clientX, t.clientY, color.bg, 12);
+  }
+
+  if (gameState === 'waiting' && Object.keys(activeTouches).length >= 2) {
+    startHoldPhase();
+  } else if (gameState === 'holding') {
+    resetHoldTimer();
+  }
+
+  updateStatusFromCount();
+}
+
+function onTouchEnd(e) {
+  e.preventDefault();
+  if (gameState === 'countdown' || gameState === 'picking' || gameState === 'done') return;
+
+  for (const t of e.changedTouches) {
+    if (activeTouches[t.identifier]) {
+      removeDot(t.identifier);
+      delete activeTouches[t.identifier];
+    }
+  }
+
+  cancelHoldTimer();
+  const count = Object.keys(activeTouches).length;
+
+  if (count === 0) {
+    gameState = 'waiting';
+    colorIndex = 0;
+  } else if (count >= 2) {
+    startHoldPhase();
+  }
+
+  updateStatusFromCount();
+}
+
+function onTouchMove(e) {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (activeTouches[t.identifier]) {
+      activeTouches[t.identifier].x = t.clientX;
+      activeTouches[t.identifier].y = t.clientY;
+      const el = activeTouches[t.identifier].el;
+      if (el) {
+        el.style.left = t.clientX + 'px';
+        el.style.top = t.clientY + 'px';
+      }
+    }
+  }
+}
+
+function updateStatusFromCount() {
+  const n = Object.keys(activeTouches).length;
+  if (n === 0) updateStatus('Posez vos doigts sur l\'écran');
+  else if (n === 1) updateStatus('En attente d\'un autre joueur...');
+  else if (gameState === 'holding') updateStatus('Ne bougez plus...');
+}
+
+function startHoldPhase() {
+  gameState = 'holding';
+  resetHoldTimer();
+}
+
+function cancelHoldTimer() {
+  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+}
+
+function resetHoldTimer() {
+  cancelHoldTimer();
+  holdTimer = setTimeout(startCountdown, 1800);
+}
+
+function startCountdown() {
+  gameState = 'countdown';
+  updateStatus('');
+
+  const overlay = document.getElementById('countdown');
+  const num = document.getElementById('countdown-num');
+  const scanLine = document.getElementById('scan-line');
+
+  let count = 3;
+  num.textContent = count;
+  overlay.style.opacity = '1';
+
+  scanLine.style.opacity = '1';
+  scanLine.style.top = '0px';
+  let scanPos = 0;
+  const scanAnim = setInterval(() => {
+    scanPos += 6;
+    if (scanPos > H) scanPos = 0;
+    scanLine.style.top = scanPos + 'px';
+  }, 16);
+
+  countdownInterval = setInterval(() => {
+    count--;
+    if (count > 0) {
+      num.textContent = count;
+      num.style.animation = 'none';
+      void num.offsetWidth;
+      num.style.animation = '';
+    } else {
+      clearInterval(countdownInterval);
+      clearInterval(scanAnim);
+      scanLine.style.opacity = '0';
+      overlay.style.opacity = '0';
+      pickWinner();
+    }
+  }, 800);
+}
+
+function pickWinner() {
+  gameState = 'picking';
+  const ids = Object.keys(activeTouches);
+  if (ids.length === 0) { resetGame(); return; }
+
+  let flashes = 0;
+  const maxFlashes = 16;
+  const dots = Object.values(activeTouches);
+
+  const flashInterval = setInterval(() => {
+    const rand = dots[Math.floor(Math.random() * dots.length)];
+    for (const d of dots) {
+      const inner = d.el && d.el.querySelector('.touch-dot-inner');
+      if (inner) inner.style.transform = 'scale(1)';
+    }
+    if (rand && rand.el) {
+      const inner = rand.el.querySelector('.touch-dot-inner');
+      if (inner) inner.style.transform = 'scale(1.3)';
+    }
+
+    flashes++;
+    if (flashes >= maxFlashes) {
+      clearInterval(flashInterval);
+      revealWinner(ids[Math.floor(Math.random() * ids.length)]);
+    }
+  }, 80 + flashes * 8);
+}
+
+function revealWinner(winnerId) {
+  const winner = activeTouches[winnerId];
+  if (!winner) { resetGame(); return; }
+
+  // Dim non-winners but keep them visible so everyone knows their color
+  for (const [id, t] of Object.entries(activeTouches)) {
+    if (id !== winnerId) {
+      const el = document.getElementById('dot-' + id);
+      if (el) {
+        el.style.transition = 'opacity 0.5s';
+        el.style.opacity = '0.25';
+        el.style.filter = 'grayscale(60%)';
+      }
+    }
+  }
+
+  // Celebrate winner
+  const winEl = document.getElementById('dot-' + winnerId);
+  if (winEl) {
+    winEl.classList.add('chosen');
+    addShockwave(winner.x, winner.y, winner.color.bg);
+    spawnParticles(winner.x, winner.y, winner.color.bg, 50);
+    setTimeout(() => {
+      addShockwave(winner.x, winner.y, winner.color.bg);
+      spawnParticles(winner.x, winner.y, '#ffffff', 30);
+    }, 200);
+  }
+
+  // setTimeout(() => showWinnerOverlay(winner, winnerId), 600);
+  gameState = 'done';
+}
+
+function showWinnerOverlay(winner, winnerId) {
+  const overlay = document.getElementById('winner-overlay');
+  const name = document.getElementById('winner-name');
+  const badge = document.getElementById('winner-color-badge');
+
+  name.textContent = winner.color.name;
+  name.style.color = winner.color.text;
+  name.style.textShadow = `0 0 40px ${winner.color.glow}, 0 0 100px ${winner.color.glow}`;
+
+  badge.style.background = winner.color.bg + '33';
+  badge.style.borderColor = winner.color.bg;
+  badge.style.color = winner.color.bg;
+  badge.style.boxShadow = `0 0 30px ${winner.color.bg}, inset 0 0 20px ${winner.color.bg}22`;
+
+  overlay.classList.add('show');
+}
+
+function resetGame() {
+  // Clear all countdown/timers
+  clearInterval(countdownInterval);
+  cancelHoldTimer();
+  countdownInterval = null;
+
+  // Hard remove all dots immediately
+  for (const id of Object.keys(activeTouches)) {
+    hardRemoveDot(id);
+  }
+  // Also remove any stray dot elements
+  document.querySelectorAll('.touch-dot').forEach(el => el.remove());
+
+  activeTouches = {};
+  colorIndex = 0;
+  particles = [];
+  shockwaves = [];
+
+  document.getElementById('winner-overlay').classList.remove('show');
+  document.getElementById('countdown').style.opacity = '0';
+  document.getElementById('scan-line').style.opacity = '0';
+
+  gameState = 'waiting';
+  updateStatus('Posez vos doigts sur l\'écran');
+}
+
+// Restart button — works on both click and touch
+const restartBtn = document.getElementById('restart-btn');
+restartBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  resetGame();
+});
+restartBtn.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  resetGame();
+});
+
+// Mini persistent replay button
+const miniReplay = document.getElementById('mini-replay');
+miniReplay.addEventListener('click', (e) => {
+  e.stopPropagation();
+  resetGame();
+});
+miniReplay.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  resetGame();
+});
+
+// Mouse support for desktop testing
+let mouseId = 'mouse';
+document.addEventListener('mousedown', e => {
+  if (gameState === 'done') return;
+  if (activeTouches[mouseId]) return;
+  const color = getColorForIndex(colorIndex++);
+  const el = createDot(mouseId, e.clientX, e.clientY, color);
+  activeTouches[mouseId] = { x: e.clientX, y: e.clientY, color, el };
+  spawnParticles(e.clientX, e.clientY, color.bg, 12);
+  if (Object.keys(activeTouches).length >= 2) startHoldPhase();
+  updateStatusFromCount();
+});
+
+document.addEventListener('mouseup', e => {
+  if (gameState === 'countdown' || gameState === 'picking' || gameState === 'done') return;
+  if (activeTouches[mouseId]) {
+    removeDot(mouseId);
+    delete activeTouches[mouseId];
+    cancelHoldTimer();
+    colorIndex = Math.max(0, colorIndex - 1);
+    if (Object.keys(activeTouches).length === 0) gameState = 'waiting';
+    updateStatusFromCount();
+  }
+});
+
+document.addEventListener('touchstart', onTouchStart, { passive: false });
+document.addEventListener('touchend', onTouchEnd, { passive: false });
+document.addEventListener('touchmove', onTouchMove, { passive: false });
+document.addEventListener('touchcancel', onTouchEnd, { passive: false });
+</script>
+</body>
+</html>
