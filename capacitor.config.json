@@ -1,8 +1,0 @@
-{
-  "appId": "com.dicefinger.app",
-  "appName": "Dice Finger",
-  "webDir": "www",
-  "server": {
-    "androidScheme": "https"
-  }
-}
